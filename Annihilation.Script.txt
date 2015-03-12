@@ -25,8 +25,9 @@
 #Setting S_PointLimit	25	as _("Points limit")	///< Points limit on a map
 
 #Setting S_BotsMobile True as _("Can bots move ?")
+#Setting S_PlayersRespawn True as _("Can players respawn when eliminated ?")
 #Setting S_BotsRandomWeapons True as _("Does bots have random weapons ? (True : Yes, False : All Rocket)")
-#Setting S_BotsPerSpawn 1 as _("How many bots are created per spawn ? (Only if bots can move. Limit : 1-5)")
+#Setting S_BotsPerSpawn 1 as _("How many bots are created per spawn ? (Only if bots can move. Limit : 1-4)")
 
 #Const Description _("TYPE: Free for all\nOBJECTIVE: Hit your opponents to score points. The first player to reach the points limit or the player with the highest score at the end of the time limit wins the map.")
 
@@ -199,9 +200,13 @@ if(GamePhase == "newRound"){
 				} else {
 					Message::SendBigMessage(TextLib::Compose("$aaf%1 : $dd0%2 / %3", _("Eliminations"), TextLib::ToText(Score), TextLib::ToText(BotPlayers.count)), 2000, 3, CUIConfig::EUISound::ScoreProgress, Variant);
 				}
+			} else{
+				if(!S_PlayersRespawn){
+					declare removed = PlayersInGame.remove(Event.Victim);
+				}
+				XmlRpc::OnArmorEmpty(Event);
+				PassOn(Event);
 			}
-			XmlRpc::OnArmorEmpty(Event);
-			PassOn(Event);
 		} 
 		// ---------------------------------- //
 		// On hit
@@ -288,11 +293,11 @@ if(GamePhase == "newRound"){
 	// ---------------------------------- //
 	// Spawn players
 	foreach (Player in Players) {
-		if (!PlayersQueue.exists(Player) && Player.SpawnStatus == CSmPlayer::ESpawnStatus::NotSpawned && !Player.RequestsSpectate) {
+		if (PlayersInGame.exists(Player) && !PlayersQueue.exists(Player) && Player.SpawnStatus == CSmPlayer::ESpawnStatus::NotSpawned && !Player.RequestsSpectate) {
 			AnniSpawnPlayer(Player);
 		}
 	}
-	if(EndTime < Now || Players.count == 0) GamePhase = "roundEnd";
+	if(EndTime < Now || Players.count == 0 || PlayersInGame.count == 0) GamePhase = "roundEnd";
 
 } else if (GamePhase == "roundEnd") {
 	sleep(2000);
@@ -342,7 +347,7 @@ SpawnScreen::DestroyMapInfo();
  */
 Void AnniSpawnPlayer(CSmPlayer _Player) {
 	_Player.ArmorMax = 400;
-	_Player.AmmoGain = 1.5;
+	_Player.AmmoGain = 1.8;
 	SetPlayerWeapon(_Player, CSmMode::EWeapon::Laser, False);
 	SpawnPlayer(_Player, 0, 400, MapLandmarks_PlayerSpawn[0].PlayerSpawn, Now);
 	_Player.ForceColor = <0., 0., 0.1>;
@@ -386,6 +391,7 @@ Void CreateBots(){
 			botsPerSpawn = S_BotsPerSpawn;
 		}
 		
+		
 		declare ident = 1;
 		while(ident <= botsPerSpawn){
 			declare newBot = CreateBotPlayer(NullId, 0);
@@ -396,7 +402,8 @@ Void CreateBots(){
 			if(S_BotsMobile) {
 				newBot.Driver.Behaviour = CSmPlayerDriver::ESmDriverBehaviour::Saunter;
 				newBot.Driver.Saunter_AnchorPoint = Spawn.Position;
-				newBot.Driver.Saunter_Radius = 4.;
+				newBot.Driver.Saunter_Radius = 50.;
+				newBot.Driver.AggroRadius = 50.;
 			} else {
 				newBot.Driver.Behaviour = CSmPlayerDriver::ESmDriverBehaviour::Turret;
 			}
