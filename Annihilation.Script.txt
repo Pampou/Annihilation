@@ -440,7 +440,7 @@ Void PlaySound(Text soundName, Integer variant){
 
 Void CreateBots(){
 	//Bots creation
-	for(da,1,20) {
+	for(da,1,30) {
 		declare Spawn <=> MapLandmarks_BotPath[MathLib::Rand(0, MapLandmarks_BotPath.count-1)];
 		
 		declare newBot = CreateBotPlayer(NullId, 0);
