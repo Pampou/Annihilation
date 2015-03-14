@@ -208,26 +208,6 @@ if(GamePhase == "newRound"){
 		// On armor empty
 		if (Event.Type == CSmModeEvent::EType::OnArmorEmpty) {
 			if(Event.Victim.IsFakePlayer){
-				if(Now < LastHit + 500){
-					KillStreak += 1;
-					LastHit = Now;
-					DoKillStreakAnnounce();
-					log(KillStreak);
-				} else {
-					KillStreak = 0;
-					LastHit = Now;
-				}
-				if(AmmoRegen){			
-					SetPlayerAmmo(Event.Shooter, CSmMode::EWeapon::Laser, 1);
-				}
-				if(Lifesteal){
-					declare lifeStealChance = MathLib::Rand(0,1);
-					if(lifeStealChance == 1){
-						Event.Shooter.Armor += 100;
-						declare UI <=> UIManager.GetUI(Event.Shooter);
-						UI.SendNotice(TextLib::Compose(_("$f6fLifesteal !")), CUIConfig::ENoticeLevel::Default, Null, CUIConfig::EAvatarVariant::Default, CUIConfig::EUISound::Silence, 0);
-					}
-				}
 				Score += 1;
 				declare Msg = "";
 				declare Gap = BotPlayers.count - Score;
@@ -277,7 +257,25 @@ if(GamePhase == "newRound"){
 						Distance = MathLib::CeilingInteger(FakeDistance)/4;
 					}
 					Distance /= PlayersInGame.count;
-
+					if(AmmoRegen){			
+						SetPlayerAmmo(Event.Shooter, CSmMode::EWeapon::Laser, 1);
+					}
+					if(Now < LastHit + 500){
+						KillStreak += 1;
+						LastHit = Now;
+						DoKillStreakAnnounce();
+					} else {
+						KillStreak = 0;
+						LastHit = Now;
+					}
+					if(Lifesteal){
+						declare lifeStealChance = MathLib::Rand(0,1);
+						if(lifeStealChance == 1){
+							Event.Shooter.Armor += 100;
+							declare UI <=> UIManager.GetUI(Event.Shooter);
+							UI.SendNotice(TextLib::Compose(_("$f6fLifesteal !")), CUIConfig::ENoticeLevel::Default, Null, CUIConfig::EAvatarVariant::Default, CUIConfig::EUISound::Silence, 0);
+						}
+					}
 					EndTime += (Distance * 1000);
 					Message::SendStatusMessage(TextLib::Compose(_("+%1 seconds !"), TextLib::ToText(Distance)), 3000, 0);
 					Event.Damage = 100;
@@ -611,7 +609,7 @@ Void DoKillStreakAnnounce(){
 Void ShowMatchInfo(){
 	declare difficulty = "$afaTraining";
 	if(S_Difficulty == 1){
-		difficulty = "0f0Easy";
+		difficulty = "$0f0Easy";
 	} else if(S_Difficulty == 2){
 		difficulty = "$aa0Medium";
 	} else if(S_Difficulty == 3){
