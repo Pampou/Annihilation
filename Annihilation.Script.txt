@@ -21,9 +21,11 @@
 // ---------------------------------- //
 // Settings
 // ---------------------------------- //
-#Setting S_Difficulty	1	as _("Difficulty\n 0 = Training, 1 = Easy, 2 = Medium, 3 = Hard, 4 = Hardcore")
+#Setting S_Difficulty	2	as _("Difficulty\n 0 = Training, 1 = Easy, 2 = Medium, 3 = Hard, 4 = Hardcore")
+#Setting S_PlayerWeaponLaser True as _("Does players play with lasers ? Rockets if no")
 
-#Const Description _("TYPE: Free for all\nOBJECTIVE: Hit your opponents to score points. The first player to reach the points limit or the player with the highest score at the end of the time limit wins the map.")
+#Const Description _("TYPE: PvE Co-Op\nOBJECTIVE: Eliminate all bots in the map before the time is running out !\nINFOS\nGreen bots : Rocket\nRed bots : Nucleus\nBlue bots : Laser\nYellow bots : Arrow")
+#Const UITickPeriod 200
 
 // ---------------------------------- //
 // Globales variables
@@ -31,12 +33,18 @@
 declare CUILayer CustomSounds;
 declare CUILayer CustomSoundsKillStreak;
 declare CUILayer MatchInfo;
+declare CUILayer LayerTeams;
 
+declare Integer LatestUITickLayerTeams;
 declare Integer LastHit;
 declare Integer KillStreak;
-
 declare Integer Score;
+declare Integer TimeLimit;
+declare Integer NewRoundTimeBonus;
+
 declare Text GamePhase;
+declare Text[Ident] PlayerManialinkLines;
+
 declare CSmPlayer[] PlayersQueue;
 declare CSmPlayer[] PlayersInGame;
 
@@ -45,9 +53,8 @@ declare Boolean BotsCanMove;
 declare Boolean BotsHaveRandomWeapons;
 declare Boolean AmmoRegen;
 declare Boolean Lifesteal;
-declare Integer TimeLimit;
-declare Integer NewRoundTimeBonus;
 declare Boolean Respawn;
+declare Boolean PlayerWeaponLaser;
 
 // ---------------------------------- //
 // Extend
@@ -81,10 +88,24 @@ ModeStatusMessage = _("TYPE: PvE Co-Op\nOBJECTIVE: Eliminate all bots in the map
 // ---------------------------------- //
 ***StartServer***
 ***
+CustomSounds = UIManager.UILayerCreate();
+UIManager.UIAll.UILayers.add(CustomSounds);
+CustomSounds.ManialinkPage = """
+""";
+
+CustomSoundsKillStreak = UIManager.UILayerCreate();
+UIManager.UIAll.UILayers.add(CustomSoundsKillStreak);
+CustomSoundsKillStreak.ManialinkPage = """
+""";
+
+MatchInfo = UIManager.UILayerCreate();
+UIManager.UIAll.UILayers.add(MatchInfo);
+MatchInfo.ManialinkPage = """
+""";
 // ---------------------------------- //
 // Set mode options
-UseClans = False;
-
+UseClans = True;
+UseAllies = True;
 // ---------------------------------- //
 // Create the rules
 ---Rules---
@@ -101,25 +122,6 @@ ST2::SetStyle("LibST_SMBaseSolo");
 ST2::SetStyle("LibST_SMBasePoints");
 //MB_SetScoresTableStyleFromXml(S_ScoresTableStylePath);
 ST2::Build("SM");
-***
-
-***InitMap***
-***
-CustomSounds = UIManager.UILayerCreate();
-UIManager.UIAll.UILayers.add(CustomSounds);
-CustomSounds.ManialinkPage = """
-""";
-
-CustomSoundsKillStreak = UIManager.UILayerCreate();
-UIManager.UIAll.UILayers.add(CustomSoundsKillStreak);
-CustomSoundsKillStreak.ManialinkPage = """
-""";
-
-MatchInfo = UIManager.UILayerCreate();
-UIManager.UIAll.UILayers.add(MatchInfo);
-MatchInfo.ManialinkPage = """
-""";
-
 ***
 
 // ---------------------------------- //
@@ -141,8 +143,7 @@ foreach (Base in MapBases) {
 
 // ---------------------------------- //
 // New map sound
-UIManager.UIAll.SendNotice("", CUIConfig::ENoticeLevel::MatchInfo, Null, CUIConfig::EAvatarVariant::Default, CUIConfig::EUISound::PhaseChange, 0);
-UIManager.UIAll.UISequence = CUIConfig::EUISequence::Playing;
+UIManager.UIAll.UISequence = CUIConfig::EUISequence::Intro;
 Score = 0;
 ***
 
@@ -151,9 +152,26 @@ Score = 0;
 // ---------------------------------- //
 ***PlayLoop***
 ***
+foreach(PlayerInGame in PlayersInGame){
+	if(!AllPlayers.exists(PlayerInGame)){
+		declare removed = PlayersInGame.remove(PlayerInGame);
+	}
+}
+// For each player
+foreach (Player in Players) {
+	//Spawn
+	if (PlayersInGame.exists(Player) && Player.SpawnStatus == CSmPlayer::ESpawnStatus::NotSpawned && GamePhase == "play") {
+		AnniSpawnPlayer(Player);
+	}
+	if(GamePhase != "play" && Player.SpawnStatus == CSmPlayer::ESpawnStatus::Spawned){
+		UnspawnPlayer(Player);
+	}
+}
+
+
+//Checking phase
 if(GamePhase == "checking"){
 	SetParametersByDifficulty();
-	ShowMatchInfo();
 	if(Players.count == 0){
 		sleep(1000);
 		declare Msg = TextLib::Compose(_("$aafNo Players"));
@@ -167,40 +185,60 @@ if(GamePhase == "checking"){
 			}
 		}
 		GamePhase = "newRound";
-	}	
+	}
+
 }
 if(GamePhase == "newRound"){
-	StartTime = Now;
-	if (TimeLimit > 0) EndTime = StartTime + (TimeLimit * 1000);
-	else EndTime = -1;	
-
-	PlaySound("prepare", 0);
-	
-	CreateBots();
-	Score = 0;
-	
+	if(PlayerWeaponLaser != S_PlayerWeaponLaser){
+		PlayerWeaponLaser = S_PlayerWeaponLaser;
+	}
+	declare Msg = "";
+	UIManager.UIAll.UISequence = CUIConfig::EUISequence::PlayersPresentation;
+	PlaySound("newRoundIn", -1);
+	Msg = TextLib::Compose(_("New round in..."));
+	Message::SendBigMessage(Msg, 2000, 3, CUIConfig::EUISound::PhaseChange, 0);
 	foreach(Player in Players){
 		if(PlayersQueue.exists(Player)){
-			if(PlayersInGame.count < 5){
+			if(PlayersInGame.count != 4){
 				PlayersInGame.add(Player);
 				Message::SendStatusMessage(Player, TextLib::Compose(_("Get ready, you are gonna playing this round !")), 3000, 0);
-				declare UI <=> UIManager.GetUI(Player);
-				UI.SendNotice(TextLib::Compose(_("%1 will play this match."), Player.Name),
-                CUIConfig::ENoticeLevel::Default, Null, CUIConfig::EAvatarVariant::Default,
-                CUIConfig::EUISound::Silence, 0);
+				foreach(ThisPlayer in Players){
+					declare UI <=> UIManager.GetUI(ThisPlayer);
+					UI.SendNotice(TextLib::Compose(_("%1 will play this match."), Player.Name),
+	                CUIConfig::ENoticeLevel::Default, Null, CUIConfig::EAvatarVariant::Default,
+	                CUIConfig::EUISound::Silence, 0);
+				}
 				declare removed = PlayersQueue.remove(Player);
-			} else {
-				break;
 			}
 		}
 	}
 	sleep(2000);
+	PlaySound("cd", 3);
+	Msg = TextLib::Compose(_("3..."));
+	Message::SendBigMessage(Msg, 1000, 3, CUIConfig::EUISound::Silence, 0);
+	sleep(1000);
+	PlaySound("cd", 2);
+	Msg = TextLib::Compose(_("2..."));
+	Message::SendBigMessage(Msg, 1000, 3, CUIConfig::EUISound::Silence, 0);
+	sleep(1000);
+	PlaySound("cd", 1);
+	Msg = TextLib::Compose(_("1..."));
+	Message::SendBigMessage(Msg, 1000, 3, CUIConfig::EUISound::Silence, 0);
+	sleep(1000);
 	
-	declare Msg = TextLib::Compose(_("$aafNew round"));
-	Message::SendBigMessage(Msg, 2000, 3, CUIConfig::EUISound::StartRound, 0);
 	StartTime = Now;
-	if (TimeLimit > 0) EndTime = StartTime + (TimeLimit * 1000);
+	if (TimeLimit > 0) EndTime = StartTime + (TimeLimit * 1000) + 2500;
 	else EndTime = -1;	
+
+	PlaySound("play", 0);
+	
+	CreateBots();
+	Score = 0;
+	
+	Msg = TextLib::Compose(_("Play !"));
+	Message::SendBigMessage(Msg, 2000, 3, CUIConfig::EUISound::StartRound, 0);
+	UIManager.UIAll.UISequence = CUIConfig::EUISequence::Playing;
+	MatchInfo(True);
 	GamePhase = "play";
 } else if(GamePhase == "play"){
 	foreach (Event, PendingEvents) {
@@ -218,18 +256,20 @@ if(GamePhase == "newRound"){
                     } else {
 						Msg = TextLib::Compose(_("Eliminate the last one!"));
 					}
-					Message::SendBigMessage(Msg, 2000, 3, CUIConfig::EUISound::TieBreakPoint, Variant);
+					Message::SendStatusMessage(Msg, 2000, 3, CUIConfig::EUISound::TieBreakPoint, Variant);
 				}
 	            else if (Gap <= 0) {
 					Msg = TextLib::Compose(_("$aafANNIHILATION !"));
-					Message::SendBigMessage(Msg, 2000, 3, CUIConfig::EUISound::VictoryPoint, 0);
+					Message::SendStatusMessage(Msg, 2000, 3, CUIConfig::EUISound::VictoryPoint, 0);
 					EndTime = 0;
 					GamePhase = "roundEnd";
 				} else {
-					Message::SendBigMessage(TextLib::Compose("$aaf%1 : $dd0%2 / %3", _("Eliminations"), TextLib::ToText(Score), TextLib::ToText(BotPlayers.count)), 2000, 3, CUIConfig::EUISound::ScoreProgress, Variant);
+					Message::SendStatusMessage(TextLib::Compose("$aaf%1 : $dd0%2 / %3", _("Eliminations"), TextLib::ToText(Score), TextLib::ToText(BotPlayers.count)), 2000, 3, CUIConfig::EUISound::ScoreProgress, MathLib::Rand(0,3));
 				}
 			} else{
 				if(!Respawn){
+					declare statusMsg = TextLib::Compose(_("%1 $m$a00has been eliminated !"), Event.Victim.Name);
+					Message::SendStatusMessage(statusMsg, 2000, 3, CUIConfig::EUISound::EndMatch, 0);
 					declare removed = PlayersInGame.remove(Event.Victim);
 				}
 				XmlRpc::OnArmorEmpty(Event);
@@ -247,38 +287,41 @@ if(GamePhase == "newRound"){
 					XmlRpc::OnHit(Event);
 					PassOn(Event);
 				} else if(!Event.Shooter.IsFakePlayer && Event.Victim.IsFakePlayer){
-					declare FakeDistance = SendHitDistanceMessage(Event);
-					declare Distance = 0;
-                    if(MathLib::CeilingInteger(FakeDistance)/4 < 5) {
-						Distance = 5;
-					} else if(MathLib::CeilingInteger(FakeDistance)/4 > 15) {
-						Distance = 15;
-					} else {
-						Distance = MathLib::CeilingInteger(FakeDistance)/4;
-					}
-					Distance /= PlayersInGame.count;
-					if(AmmoRegen){			
-						SetPlayerAmmo(Event.Shooter, CSmMode::EWeapon::Laser, 1);
-					}
-					if(Now < LastHit + 500){
-						KillStreak += 1;
-						LastHit = Now;
-						DoKillStreakAnnounce();
-					} else {
-						KillStreak = 0;
-						LastHit = Now;
-					}
-					if(Lifesteal){
-						declare lifeStealChance = MathLib::Rand(0,1);
-						if(lifeStealChance == 1){
-							Event.Shooter.Armor += 100;
-							declare UI <=> UIManager.GetUI(Event.Shooter);
-							UI.SendNotice(TextLib::Compose(_("$f6fLifesteal !")), CUIConfig::ENoticeLevel::Default, Null, CUIConfig::EAvatarVariant::Default, CUIConfig::EUISound::Silence, 0);
+					declare Distance = SendHitDistanceMessage(Event);
+					if(PlayerWeaponLaser){
+						if(AmmoRegen){			
+							SetPlayerAmmo(Event.Shooter, CSmMode::EWeapon::Laser, 1);
+						}
+						if(Now < LastHit + 500){
+							KillStreak += 1;
+							LastHit = Now;
+							DoKillStreakAnnounce();
+						} else {
+							KillStreak = 0;
+							LastHit = Now;
+						}
+						if(Lifesteal){
+							declare lifeStealChance = MathLib::Rand(0,1);
+							if(lifeStealChance == 1){
+								Event.Shooter.Armor += 100;
+								declare UI <=> UIManager.GetUI(Event.Shooter);
+								UI.SendNotice(TextLib::Compose(_("$f6fLifesteal !")), CUIConfig::ENoticeLevel::Default, Null, CUIConfig::EAvatarVariant::Default, CUIConfig::EUISound::Silence, 0);
+							}
 						}
 					}
-					EndTime += (Distance * 1000);
-					Message::SendStatusMessage(TextLib::Compose(_("+%1 seconds !"), TextLib::ToText(Distance)), 3000, 0);
-					Event.Damage = 100;
+					if(Event.Victim.Armor == 100){
+												
+						declare bonusTime = MathLib::Rand(2,8) / PlayersInGame.count;
+						
+						EndTime += (bonusTime * 1000) + (KillStreak * 1000);
+						
+						if(KillStreak == 0){
+							Message::SendBigMessage(TextLib::Compose(_("+%1 seconds !"), TextLib::ToText(bonusTime)), 3000, 0);
+						} else {
+							Message::SendBigMessage(TextLib::Compose(_("+%1 seconds ! ($a00+%2!$fff)"), TextLib::ToText(bonusTime+KillStreak), TextLib::ToText(KillStreak)), 3000, 0);
+						}
+						Event.Damage = 100;
+					}
 					XmlRpc::OnHit(Event);
 					PassOn(Event);
 				} else {
@@ -288,12 +331,19 @@ if(GamePhase == "newRound"){
 		} 
 		// ---------------------------------- //
 		// On player request respawn
-		else if (PlayersInGame.exists(Event.Shooter) && Event.Type == CSmModeEvent::EType::OnPlayerRequestRespawn) {
-			Score::RemovePoints(Event.Player, 1);
+		else if (Event.Type == CSmModeEvent::EType::OnPlayerRequestRespawn) {
+			if(Event.Player.SpawnStatus == CSmPlayer::ESpawnStatus::Spawned) {
+				UnspawnPlayer(Event.Player);
+				if(!Respawn){
+					declare statusMsg = TextLib::Compose(_("%1 $m$a00has been eliminated !"), Event.Player.Name);
+					Message::SendStatusMessage(statusMsg, 2000, 3, CUIConfig::EUISound::EndMatch, 0);
+					declare removed = PlayersInGame.remove(Event.Player);
+				}
+			}
 			XmlRpc::OnPlayerRequestRespawn(Event);
 			PassOn(Event);
 		} else {
-			PassOn(Event);
+			Discard(Event);
 		}
 	}	
 	
@@ -341,21 +391,17 @@ if(GamePhase == "newRound"){
 	{
 		PlaySound("cd", 1);
 	}
-	
-	// ---------------------------------- //
-	// Spawn players
-	foreach (Player in Players) {
-		if (PlayersInGame.exists(Player) && !PlayersQueue.exists(Player) && Player.SpawnStatus == CSmPlayer::ESpawnStatus::NotSpawned && !Player.RequestsSpectate) {
-			AnniSpawnPlayer(Player);
-		}
+	if(EndTime < Now || Players.count == 0 || PlayersInGame.count == 0){
+		sleep(1000);
+		GamePhase = "roundEnd";
 	}
-	if(EndTime < Now || Players.count == 0 || PlayersInGame.count == 0) GamePhase = "roundEnd";
 
 } else if (GamePhase == "roundEnd") {
-	sleep(2000);
-	UnspawnPlayers();
-	sleep(1000);
+	sleep(3000);
+	UIManager.UIAll.UISequence = CUIConfig::EUISequence::PlayersPresentation;
+	MatchInfo.ManialinkPage = "";
 	DestroyAllBotPlayers();
+	MatchInfo(False);
 	EndTime = -1;
 	declare Msg = "";
 	if(Score == BotPlayers.count) {
@@ -364,10 +410,11 @@ if(GamePhase == "newRound"){
 		Message::SendBigMessage(Msg, 2000, 3, CUIConfig::EUISound::EndRound, 0);
 	} else {
 		Msg = TextLib::Compose(_("$f55Game Over !"));
+		PlaySound("lost", 0);
 		Message::SendBigMessage(Msg, 2000, 3, CUIConfig::EUISound::EndRound, 0);
 	}
 	PlayersInGame.clear();
-	sleep(5000);
+	sleep(3000);
 	GamePhase = "checking";
 }
 Message::Loop();
@@ -376,12 +423,15 @@ Message::Loop();
 // ---------------------------------- //
 // Map end
 // ---------------------------------- //
-
+/****EndMap***
+***
+****/
 // ---------------------------------- //
 // Server end
 // ---------------------------------- //
 ***EndServer***
 ***
+UIManager.UILayerDestroyAll();
 Interface::DestroyRank();
 SpawnScreen::DestroyRules();
 SpawnScreen::DestroyScores();
@@ -400,9 +450,13 @@ SpawnScreen::DestroyMapInfo();
 Void AnniSpawnPlayer(CSmPlayer _Player) {
 	_Player.ArmorMax = 400;
 	_Player.AmmoGain = 1.8;
-	SetPlayerWeapon(_Player, CSmMode::EWeapon::Laser, False);
-	SpawnPlayer(_Player, 0, 400, MapLandmarks_PlayerSpawn[0].PlayerSpawn, Now);
-	_Player.ForceColor = <0., 0., 0.1>;
+	if(PlayerWeaponLaser){
+		SetPlayerWeapon(_Player, CSmMode::EWeapon::Laser, False);
+	} else {
+		SetPlayerWeapon(_Player, CSmMode::EWeapon::Rocket, False);
+	}
+	SetPlayerClan(_Player, 1);
+	SpawnPlayer(_Player, 1, 400, MapLandmarks_PlayerSpawn[MathLib::Rand(0, MapLandmarks_PlayerSpawn.count-1)].PlayerSpawn, Now);
 }
 
 Void PlaySound(Text soundName, Integer variant){
@@ -427,7 +481,7 @@ Void PlaySound(Text soundName, Integer variant){
 		<audio looping="0" hidden="1" play="1" data="https://dl.dropboxusercontent.com/u/42719494/Maniaplanet/excellent.ogg"/>
 		</manialink>""";
 	}
-	if(soundName == "prepare"){
+	if(soundName == "play"){
 		CustomSounds.ManialinkPage = """<manialink version="2">
 		<audio looping="0" hidden="1" play="1" data="https://dl.dropboxusercontent.com/u/42719494/Maniaplanet/Play.ogg"/>
 		</manialink>""";
@@ -435,6 +489,10 @@ Void PlaySound(Text soundName, Integer variant){
 	if(soundName == "lost"){
 		CustomSounds.ManialinkPage = """<manialink version="2">
 		<audio looping="0" hidden="1" play="1" data="https://dl.dropboxusercontent.com/u/42719494/Maniaplanet/lostmatch.ogg"/>        </manialink>""";
+	}
+	if(soundName == "newRoundIn"){
+		CustomSounds.ManialinkPage = """<manialink version="2">
+		<audio looping="0" hidden="1" play="1" data="https://dl.dropboxusercontent.com/u/42719494/Maniaplanet/NewRoundIn.ogg"/>        </manialink>""";
 	}
 }
 
@@ -445,7 +503,6 @@ Void CreateBots(){
 		
 		declare newBot = CreateBotPlayer(NullId, 0);
 
-		newBot.ArmorMax = 100;
 		if(BotsCanShoot){
 			newBot.Driver.AttackFilter = CSmPlayerDriver::ESmAttackFilter::OppositePlayers;
 		} else {
@@ -454,7 +511,7 @@ Void CreateBots(){
 		if(BotsCanMove){
 			newBot.Driver.Behaviour = CSmPlayerDriver::ESmDriverBehaviour::Saunter;
 			newBot.Driver.Saunter_AnchorPoint = Spawn.Position;
-			newBot.Driver.Saunter_Radius = 50.;
+			newBot.Driver.Saunter_Radius = 10.;
 		} else {
 			newBot.Driver.Behaviour = CSmPlayerDriver::ESmDriverBehaviour::Turret;
 		}
@@ -471,16 +528,24 @@ Void CreateBots(){
 			newBot.ForceColor = <0.0, 0.5, 0.5>;
 		} else if(weapon == "Nucleus"){
 			SetPlayerWeapon(newBot, CSmMode::EWeapon::Nucleus, False);
-			newBot.ForceColor = <1.0, 0.0, 0.0>;
+			newBot.ForceColor = <0.5, 0.0, 0.5>;
 		} else if(weapon == "Arrow"){
 			SetPlayerWeapon(newBot, CSmMode::EWeapon::Arrow, False);
 			newBot.ForceColor = <0.5, 0.5, 0.0>;
 		}
 		newBot.Driver.AggroRadius = 50.;
-		newBot.Driver.DisengageDistance = 30.;
+		newBot.Driver.DisengageDistance = 1.;
 		newBot.Driver.Accuracy = 0.8;
 		newBot.Driver.Fov = 360.0;
-		SpawnBotPlayer(newBot, 0, 100, Spawn.BotPath, Now);
+		declare armor = 0;
+		if(PlayerWeaponLaser){
+			armor = 100;
+			newBot.ArmorMax = 100;
+		} else {
+			armor = 300;
+			newBot.ArmorMax = 300;
+		}		
+		SpawnBotPlayer(newBot, 0, armor, Spawn.BotPath, Now);
 	}
 }
 
@@ -520,7 +585,7 @@ Real SendHitDistanceMessage(CSmModeEvent _Event) {
 Void SetParametersByDifficulty() {
 	if(S_Difficulty == 0) {
 		BotsCanShoot = False;
-		BotsCanMove = False;
+		BotsCanMove = True;
 		BotsHaveRandomWeapons = False;
 		Lifesteal = False;
 		TimeLimit = 120;
@@ -606,66 +671,70 @@ Void DoKillStreakAnnounce(){
 	}
 }
 
-Void ShowMatchInfo(){
-	declare difficulty = "$afaTraining";
-	if(S_Difficulty == 1){
-		difficulty = "$0f0Easy";
-	} else if(S_Difficulty == 2){
-		difficulty = "$aa0Medium";
-	} else if(S_Difficulty == 3){
-		difficulty = "$f00Hard";
-	} else if(S_Difficulty == 4){
-		difficulty = "$900Hardcore";
+Void MatchInfo(Boolean show){
+	if(show){
+		declare difficulty = "$afaTraining";
+		if(S_Difficulty == 1){
+			difficulty = "$0f0Easy";
+		} else if(S_Difficulty == 2){
+			difficulty = "$aa0Medium";
+		} else if(S_Difficulty == 3){
+			difficulty = "$f00Hard";
+		} else if(S_Difficulty == 4){
+			difficulty = "$900Hardcore";
+		}
+		
+		declare LifestealInfo = "$afaYes";
+		if(!Lifesteal){
+			LifestealInfo = "$f00No";
+		}
+		
+		declare AmmoRegenInfo = "$afaYes";
+		if(!AmmoRegen){
+			AmmoRegenInfo = "$f00No";
+		}
+		
+		declare RespawnInfo = "$afaYes";
+		if(!Respawn){
+			RespawnInfo = "$f00No";
+		}
+		
+		/*MatchInfo.ManialinkPage = """
+			<frame posn="158 -58 0">
+				<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sRound")}}} : 1/3" />
+			</frame>
+		""";*/
+		MatchInfo.ManialinkPage = """
+			<frame posn="158 -62 0">
+				<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sDifficulty")}}} : {{{ difficulty }}}" />
+			</frame>
+		""";
+		MatchInfo.ManialinkPage ^= """
+			<frame posn="158 -66 0">
+				<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sTime Limit")}}} : {{{ TimeLimit }}}" />
+			</frame>
+			""";
+		MatchInfo.ManialinkPage ^= """
+			<frame posn="158 -70 0">
+				<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sRespawn")}}} : {{{ RespawnInfo }}}" />
+			</frame>
+			""";
+		/*MatchInfo.ManialinkPage ^= """
+			<frame posn="158 -74 0">
+				<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sAdditionnal Time Per Round")}}} : {{{ NewRoundTimeBonus }}}" />
+			</frame>
+			""";*/
+		MatchInfo.ManialinkPage ^= """
+			<frame posn="158 -78 0">
+				<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sLifesteal")}}} : {{{ LifestealInfo }}}" />
+			</frame>
+			""";
+		MatchInfo.ManialinkPage ^= """
+			<frame posn="158 -82 0">
+				<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sAmmo Regen on Elimination")}}} : {{{ AmmoRegenInfo }}}" />
+			</frame>
+			""";
+	} else {
+		MatchInfo.ManialinkPage = "";
 	}
-	
-	declare LifestealInfo = "$afaYes";
-	if(!Lifesteal){
-		LifestealInfo = "$f00No";
-	}
-	
-	declare AmmoRegenInfo = "$afaYes";
-	if(!AmmoRegen){
-		AmmoRegenInfo = "$f00No";
-	}
-	
-	declare RespawnInfo = "$afaYes";
-	if(!Respawn){
-		RespawnInfo = "$f00No";
-	}
-	
-	/*MatchInfo.ManialinkPage = """
-		<frame posn="158 -58 0">
-			<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sRound")}}} : 1/3" />
-		</frame>
-	""";*/
-	MatchInfo.ManialinkPage = """
-		<frame posn="158 -62 0">
-			<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sDifficulty")}}} : {{{ difficulty }}}" />
-		</frame>
-	""";
-	MatchInfo.ManialinkPage ^= """
-		<frame posn="158 -66 0">
-			<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sTime Limit")}}} : {{{ TimeLimit }}}" />
-		</frame>
-		""";
-	MatchInfo.ManialinkPage ^= """
-		<frame posn="158 -70 0">
-			<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sRespawn")}}} : {{{ RespawnInfo }}}" />
-		</frame>
-		""";
-	MatchInfo.ManialinkPage ^= """
-		<frame posn="158 -74 0">
-			<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sAdditionnal Time Per Round")}}} : {{{ NewRoundTimeBonus }}}" />
-		</frame>
-		""";
-	MatchInfo.ManialinkPage ^= """
-		<frame posn="158 -78 0">
-			<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sLifesteal")}}} : {{{ LifestealInfo }}}" />
-		</frame>
-		""";
-	MatchInfo.ManialinkPage ^= """
-		<frame posn="158 -82 0">
-			<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sAmmo Regen on Elimination")}}} : {{{ AmmoRegenInfo }}}" />
-		</frame>
-		""";
 }
