@@ -202,12 +202,6 @@ if(GamePhase == "newRound"){
 			if(PlayersInGame.count != 4){
 				PlayersInGame.add(Player);
 				Message::SendStatusMessage(Player, TextLib::Compose(_("Get ready, you are gonna playing this round !")), 3000, 0);
-				foreach(ThisPlayer in Players){
-					declare UI <=> UIManager.GetUI(ThisPlayer);
-					UI.SendNotice(TextLib::Compose(_("%1 will play this match."), Player.Name),
-	                CUIConfig::ENoticeLevel::Default, Null, CUIConfig::EAvatarVariant::Default,
-	                CUIConfig::EUISound::Silence, 0);
-				}
 				declare removed = PlayersQueue.remove(Player);
 			}
 		}
@@ -311,7 +305,7 @@ if(GamePhase == "newRound"){
 					}
 					if(Event.Victim.Armor == 100){
 												
-						declare bonusTime = MathLib::Rand(2,8) / PlayersInGame.count;
+						declare bonusTime = MathLib::Rand(2,8);
 						
 						EndTime += (bonusTime * 1000) + (KillStreak * 1000);
 						
