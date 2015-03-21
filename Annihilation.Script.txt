@@ -528,7 +528,7 @@ Void CreateBots(){
 			newBot.ForceColor = <0.5, 0.5, 0.0>;
 		}
 		newBot.Driver.AggroRadius = 50.;
-		newBot.Driver.DisengageDistance = 1.;
+		newBot.Driver.DisengageDistance = 30.;
 		newBot.Driver.Accuracy = 0.8;
 		newBot.Driver.Fov = 360.0;
 		declare armor = 0;
@@ -536,8 +536,8 @@ Void CreateBots(){
 			armor = 100;
 			newBot.ArmorMax = 100;
 		} else {
-			armor = 300;
-			newBot.ArmorMax = 300;
+			armor = 200;
+			newBot.ArmorMax = 200;
 		}		
 		SpawnBotPlayer(newBot, 0, armor, Spawn.BotPath, Now);
 	}
