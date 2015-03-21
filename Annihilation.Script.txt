@@ -21,8 +21,8 @@
 // ---------------------------------- //
 // Settings
 // ---------------------------------- //
-#Setting S_Difficulty	2	as _("Difficulty\n 0 = Training, 1 = Easy, 2 = Medium, 3 = Hard, 4 = Hardcore")
 #Setting S_PlayerWeaponLaser True as _("Does players play with lasers ? Rockets if no")
+#Setting S_Difficulty	2	as _("Difficulty\n 0 = Training, 1 = Easy, 2 = Medium, 3 = Hard, 4 = Hardcore")
 
 #Const Description _("TYPE: PvE Co-Op\nOBJECTIVE: Eliminate all bots in the map before the time is running out !\nINFOS\nGreen bots : Rocket\nRed bots : Nucleus\nBlue bots : Laser\nYellow bots : Arrow")
 #Const UITickPeriod 200
@@ -44,9 +44,6 @@ declare Integer NewRoundTimeBonus;
 
 declare Text GamePhase;
 declare Text[Ident] PlayerManialinkLines;
-
-declare CSmPlayer[] PlayersQueue;
-declare CSmPlayer[] PlayersInGame;
 
 declare Boolean BotsCanShoot;
 declare Boolean BotsCanMove;
@@ -120,7 +117,7 @@ SpawnScreen::CreateMapInfo();
 // Create the scores table
 ST2::SetStyle("LibST_SMBaseSolo");
 ST2::SetStyle("LibST_SMBasePoints");
-//MB_SetScoresTableStyleFromXml(S_ScoresTableStylePath);
+MB_SetScoresTableStyleFromXml(S_ScoresTableStylePath);
 ST2::Build("SM");
 ***
 
@@ -132,6 +129,7 @@ ST2::Build("SM");
 LastHit = Now;
 KillStreak = 0;
 GamePhase = "checking";
+Score::MatchBegin();
 SM::SetupDefaultVisibility();
 
 // ---------------------------------- //
@@ -152,15 +150,11 @@ Score = 0;
 // ---------------------------------- //
 ***PlayLoop***
 ***
-foreach(PlayerInGame in PlayersInGame){
-	if(!AllPlayers.exists(PlayerInGame)){
-		declare removed = PlayersInGame.remove(PlayerInGame);
-	}
-}
+log(GamePhase);
 // For each player
 foreach (Player in Players) {
 	//Spawn
-	if (PlayersInGame.exists(Player) && Player.SpawnStatus == CSmPlayer::ESpawnStatus::NotSpawned && GamePhase == "play") {
+	if (Respawn && Player.SpawnStatus == CSmPlayer::ESpawnStatus::NotSpawned && GamePhase == "play") {
 		AnniSpawnPlayer(Player);
 	}
 	if(GamePhase != "play" && Player.SpawnStatus == CSmPlayer::ESpawnStatus::Spawned){
@@ -172,18 +166,17 @@ foreach (Player in Players) {
 //Checking phase
 if(GamePhase == "checking"){
 	SetParametersByDifficulty();
+	Score::RoundBegin();
+	UIManager.UIAll.ScoreTableVisibility = CUIConfig::EVisibility::Normal;
 	if(Players.count == 0){
 		sleep(1000);
-		declare Msg = TextLib::Compose(_("$aafNo Players"));
+		declare Msg = TextLib::Compose(_("No Players"));
+		Message::SendBigMessage(Msg, 1000, 3, CUIConfig::EUISound::Silence, 0);
+	} else if (Players.count > 4){
+		sleep(1000);
+		declare Msg = TextLib::Compose(_("Too much players. Max players script-forced to 4."));
 		Message::SendBigMessage(Msg, 1000, 3, CUIConfig::EUISound::Silence, 0);
 	} else {
-		PlayersQueue.clear();
-		PlayersInGame.clear();
-		foreach(Player in Players){
-			if(!PlayersQueue.exists(Player)){
-				PlayersQueue.add(Player);
-			}
-		}
 		GamePhase = "newRound";
 	}
 
@@ -197,15 +190,6 @@ if(GamePhase == "newRound"){
 	PlaySound("newRoundIn", -1);
 	Msg = TextLib::Compose(_("New round in..."));
 	Message::SendBigMessage(Msg, 2000, 3, CUIConfig::EUISound::PhaseChange, 0);
-	foreach(Player in Players){
-		if(PlayersQueue.exists(Player)){
-			if(PlayersInGame.count != 4){
-				PlayersInGame.add(Player);
-				Message::SendStatusMessage(Player, TextLib::Compose(_("Get ready, you are gonna playing this round !")), 3000, 0);
-				declare removed = PlayersQueue.remove(Player);
-			}
-		}
-	}
 	sleep(2000);
 	PlaySound("cd", 3);
 	Msg = TextLib::Compose(_("3..."));
@@ -229,10 +213,14 @@ if(GamePhase == "newRound"){
 	CreateBots();
 	Score = 0;
 	
+	//Message::SendStatusMessage(Player, TextLib::Compose(_("Get ready, you are gonna playing this round !")), 3000, 0);
 	Msg = TextLib::Compose(_("Play !"));
 	Message::SendBigMessage(Msg, 2000, 3, CUIConfig::EUISound::StartRound, 0);
 	UIManager.UIAll.UISequence = CUIConfig::EUISequence::Playing;
 	MatchInfo(True);
+	foreach (Player in Players) {
+		AnniSpawnPlayer(Player);
+	}
 	GamePhase = "play";
 } else if(GamePhase == "play"){
 	foreach (Event, PendingEvents) {
@@ -258,13 +246,13 @@ if(GamePhase == "newRound"){
 					EndTime = 0;
 					GamePhase = "roundEnd";
 				} else {
-					Message::SendStatusMessage(TextLib::Compose("$aaf%1 : $dd0%2 / %3", _("Eliminations"), TextLib::ToText(Score), TextLib::ToText(BotPlayers.count)), 2000, 3, CUIConfig::EUISound::ScoreProgress, MathLib::Rand(0,3));
+					Message::SendStatusMessage(TextLib::Compose("%1 : %2 / %3", _("Eliminations"), TextLib::ToText(Score), TextLib::ToText(BotPlayers.count)), 2000, 3, CUIConfig::EUISound::ScoreProgress, MathLib::Rand(0,3));
 				}
+				MatchInfo(True);
 			} else{
 				if(!Respawn){
 					declare statusMsg = TextLib::Compose(_("%1 $m$a00has been eliminated !"), Event.Victim.Name);
 					Message::SendStatusMessage(statusMsg, 2000, 3, CUIConfig::EUISound::EndMatch, 0);
-					declare removed = PlayersInGame.remove(Event.Victim);
 				}
 				XmlRpc::OnArmorEmpty(Event);
 				PassOn(Event);
@@ -281,6 +269,9 @@ if(GamePhase == "newRound"){
 					XmlRpc::OnHit(Event);
 					PassOn(Event);
 				} else if(!Event.Shooter.IsFakePlayer && Event.Victim.IsFakePlayer){
+					declare Points = 1;
+					Score::AddPoints(Event.Shooter, Points);
+					Event.ShooterPoints = Points;
 					declare Distance = SendHitDistanceMessage(Event);
 					if(PlayerWeaponLaser){
 						if(AmmoRegen){			
@@ -305,7 +296,23 @@ if(GamePhase == "newRound"){
 					}
 					if(Event.Victim.Armor == 100){
 												
-						declare bonusTime = MathLib::Rand(2,8);
+						declare bonusTime = 0;
+						
+						if(S_Difficulty == 0){
+							bonusTime = 5;
+						} else if (S_Difficulty == 1) {
+							bonusTime = MathLib::Rand(3,5);
+						} else if (S_Difficulty == 2) {
+							bonusTime = MathLib::Rand(3,5);
+						} else if (S_Difficulty == 3) {
+							bonusTime = MathLib::Rand(2,4);
+						} else if (S_Difficulty == 4) {
+							bonusTime = MathLib::Rand(2,3);
+						} else if (S_Difficulty == 5) {
+							bonusTime = MathLib::Rand(2,3);
+						}
+							
+						
 						
 						EndTime += (bonusTime * 1000) + (KillStreak * 1000);
 						
@@ -331,7 +338,6 @@ if(GamePhase == "newRound"){
 				if(!Respawn){
 					declare statusMsg = TextLib::Compose(_("%1 $m$a00has been eliminated !"), Event.Player.Name);
 					Message::SendStatusMessage(statusMsg, 2000, 3, CUIConfig::EUISound::EndMatch, 0);
-					declare removed = PlayersInGame.remove(Event.Player);
 				}
 			}
 			XmlRpc::OnPlayerRequestRespawn(Event);
@@ -385,13 +391,14 @@ if(GamePhase == "newRound"){
 	{
 		PlaySound("cd", 1);
 	}
-	if(EndTime < Now || Players.count == 0 || PlayersInGame.count == 0){
+	if(EndTime < Now || Players.count == 0 || ClansNbPlayersAlive[1] == 0){
 		sleep(1000);
 		GamePhase = "roundEnd";
 	}
 
 } else if (GamePhase == "roundEnd") {
 	sleep(3000);
+	UIManager.UIAll.ScoreTableVisibility = CUIConfig::EVisibility::ForcedVisible;
 	UIManager.UIAll.UISequence = CUIConfig::EUISequence::PlayersPresentation;
 	MatchInfo.ManialinkPage = "";
 	DestroyAllBotPlayers();
@@ -402,13 +409,15 @@ if(GamePhase == "newRound"){
 		Msg = TextLib::Compose(_("$5f5Excellent !"));
 		PlaySound("excellent", 0);
 		Message::SendBigMessage(Msg, 2000, 3, CUIConfig::EUISound::EndRound, 0);
+		MatchEndRequested = True;
+		Score::MatchEnd(True);
 	} else {
 		Msg = TextLib::Compose(_("$f55Game Over !"));
 		PlaySound("lost", 0);
 		Message::SendBigMessage(Msg, 2000, 3, CUIConfig::EUISound::EndRound, 0);
 	}
-	PlayersInGame.clear();
 	sleep(3000);
+	Score::RoundEnd();
 	GamePhase = "checking";
 }
 Message::Loop();
@@ -513,6 +522,10 @@ Void CreateBots(){
 		declare weapon = "Rocket";
 		if(BotsHaveRandomWeapons) {
 			weapon = weapons[MathLib::Rand(0,3)];
+		} else {
+			if(S_Difficulty == 5) {
+				weapon = "Nucleus";
+			}
 		}
 		if(weapon == "Rocket"){
 			SetPlayerWeapon(newBot, CSmMode::EWeapon::Rocket, False);
@@ -524,13 +537,14 @@ Void CreateBots(){
 			SetPlayerWeapon(newBot, CSmMode::EWeapon::Nucleus, False);
 			newBot.ForceColor = <0.5, 0.0, 0.5>;
 		} else if(weapon == "Arrow"){
+			SetPlayerAmmoMax(newBot, CSmMode::EWeapon::Arrow, 2);
 			SetPlayerWeapon(newBot, CSmMode::EWeapon::Arrow, False);
 			newBot.ForceColor = <0.5, 0.5, 0.0>;
 		}
 		newBot.Driver.AggroRadius = 50.;
 		newBot.Driver.DisengageDistance = 30.;
 		newBot.Driver.Accuracy = 0.8;
-		newBot.Driver.Fov = 360.0;
+		newBot.Driver.Fov = 300.0;
 		declare armor = 0;
 		if(PlayerWeaponLaser){
 			armor = 100;
@@ -584,7 +598,6 @@ Void SetParametersByDifficulty() {
 		Lifesteal = False;
 		TimeLimit = 120;
 		AmmoRegen = True;
-		NewRoundTimeBonus = 45;
 		Respawn = True;
 	} else if(S_Difficulty == 1) {
 		BotsCanShoot = True;
@@ -593,7 +606,6 @@ Void SetParametersByDifficulty() {
 		Lifesteal = True;
 		TimeLimit = 60;
 		AmmoRegen = True;
-		NewRoundTimeBonus = 45;
 		Respawn = True;
 	} else if(S_Difficulty == 2) {
 		BotsCanShoot = True;
@@ -602,7 +614,6 @@ Void SetParametersByDifficulty() {
 		Lifesteal = True;
 		TimeLimit = 60;
 		AmmoRegen = True;
-		NewRoundTimeBonus = 45;
 		Respawn = True;
 	} else if(S_Difficulty == 3) {
 		BotsCanShoot = True;
@@ -611,7 +622,6 @@ Void SetParametersByDifficulty() {
 		Lifesteal = True;
 		TimeLimit = 45;
 		AmmoRegen = False;
-		NewRoundTimeBonus = 30;
 		Respawn = False;
 	} else if(S_Difficulty == 4) {
 		BotsCanShoot = True;
@@ -620,7 +630,14 @@ Void SetParametersByDifficulty() {
 		Lifesteal = False;
 		TimeLimit = 30;
 		AmmoRegen = False;
-		NewRoundTimeBonus = 20;
+		Respawn = False;
+	} else if(S_Difficulty == 5) {
+		BotsCanShoot = True;
+		BotsCanMove = True;
+		BotsHaveRandomWeapons = False;
+		Lifesteal = False;
+		TimeLimit = 30;
+		AmmoRegen = False;
 		Respawn = False;
 	}
 }
@@ -676,6 +693,8 @@ Void MatchInfo(Boolean show){
 			difficulty = "$f00Hard";
 		} else if(S_Difficulty == 4){
 			difficulty = "$900Hardcore";
+		} else if(S_Difficulty == 5){
+			difficulty = "$000Nightmare";
 		}
 		
 		declare LifestealInfo = "$afaYes";
@@ -693,31 +712,26 @@ Void MatchInfo(Boolean show){
 			RespawnInfo = "$f00No";
 		}
 		
-		/*MatchInfo.ManialinkPage = """
-			<frame posn="158 -58 0">
-				<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sRound")}}} : 1/3" />
-			</frame>
-		""";*/
 		MatchInfo.ManialinkPage = """
 			<frame posn="158 -62 0">
-				<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sDifficulty")}}} : {{{ difficulty }}}" />
+				<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sEliminations")}}} : {{{Score}}}/{{{BotPlayers.count}}}" />
 			</frame>
 		""";
 		MatchInfo.ManialinkPage ^= """
 			<frame posn="158 -66 0">
+				<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sDifficulty")}}} : {{{ difficulty }}}" />
+			</frame>
+		""";
+		MatchInfo.ManialinkPage ^= """
+			<frame posn="158 -70 0">
 				<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sTime Limit")}}} : {{{ TimeLimit }}}" />
 			</frame>
 			""";
 		MatchInfo.ManialinkPage ^= """
-			<frame posn="158 -70 0">
+			<frame posn="158 -74 0">
 				<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sRespawn")}}} : {{{ RespawnInfo }}}" />
 			</frame>
 			""";
-		/*MatchInfo.ManialinkPage ^= """
-			<frame posn="158 -74 0">
-				<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sAdditionnal Time Per Round")}}} : {{{ NewRoundTimeBonus }}}" />
-			</frame>
-			""";*/
 		MatchInfo.ManialinkPage ^= """
 			<frame posn="158 -78 0">
 				<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sLifesteal")}}} : {{{ LifestealInfo }}}" />
