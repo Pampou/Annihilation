@@ -22,10 +22,10 @@
 // Settings
 // ---------------------------------- //
 #Setting S_Difficulty	2	as _("Difficulty : From 0 to 6. -1 allows custom difficulty and enable options below.")
-#Setting S_TimeLimit 30 as _("Time limit ? Min : 10, Max : 200 [in seconds]")
+#Setting S_TimeLimit 10 as _("Time limit ? Min : 10, Max : 200 [in seconds]")
 #Setting S_AmmoRegen False as _("Ammo regeneration on elimination")
 #Setting S_LifeSteal False as _("LifeSteal chance ?")
-#Setting S_TimeReward False as _("Bot elimination give additional time ?")
+#Setting S_TimeReward False as _("Bot elimination give additionnal time ?")
 #Setting S_Respawn False as _("Are players allowed to respawn ?")
 #Setting S_PlayersWeapon 1 as _("Which weapon players have ? 0 - Random, 1 - Laser, 2 - Rocket, 3 - Nucleus, 4 - Arrow")
 #Setting S_BotsAccuracy 2 as _("Aim bots accuracy ? 1 - Bad, 2 - Normal, 3 - Almost Perfect")
@@ -937,7 +937,7 @@ Void SetParametersByDifficulty() {
 	} else if(S_Difficulty == 5) {
 		BotsCanShoot = True;
 		BotsCanMove = True;
-		BotsWeapons = 3;
+		BotsWeapons = 0;
 		LifeSteal = False;
 		TimeLimit = 40;
 		AmmoRegen = False;
