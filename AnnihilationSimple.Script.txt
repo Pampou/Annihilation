@@ -1,0 +1,588 @@
+/**
+ *	Annihilation (Simple version) mode - PvE Co-op GameMode
+ *  Author : lethan
+ *  Contact : lethanov@gmail.com
+ */
+
+ 
+// ---------------------------------- //
+// Requirements
+// ---------------------------------- //
+#Extends "Modes/ShootMania/ModeBase.Script.txt"
+
+#Const	CompatibleMapTypes	"MeleeArena"
+#Const	Version				"2016-02-14"
+#Const	ScriptName			"AnnihilationSimple.Script.txt"
+
+#Include "MathLib" as MathLib
+#Include "TextLib" as TextLib
+#Include "Libs/Nadeo/Message.Script.txt" as Message
+#Include "Libs/Nadeo/Interface.Script.txt" as Interface
+#Include "Libs/Nadeo/ShootMania/SM.Script.txt" as SM
+#Include "Libs/Nadeo/ShootMania/Score.Script.txt" as Score
+#Include "Libs/Nadeo/ShootMania/SpawnScreen.Script.txt" as SpawnScreen
+
+// ---------------------------------- //
+// Settings
+// ---------------------------------- //
+
+#Const Description _("TYPE: PvE Co-Op\nOBJECTIVE: Eliminate all bots in the map before the time is running out !\nINFOS\nGreen bots : Rocket\nRed bots : Nucleus\nBlue bots : Laser\nYellow bots : Arrow")
+#Const UITickPeriod 200
+
+// ---------------------------------- //
+// Global var
+// ---------------------------------- //
+declare CUILayer SoundLayerFirst;
+declare CUILayer SoundLayerSecond;
+declare CUILayer MatchInfo;
+
+declare Integer LastHit;
+declare Integer KillStreak;
+declare Integer Score;
+declare Integer TimeLimit;
+
+declare Text GamePhase;
+declare Boolean CanPlay;
+
+// ---------------------------------- //
+// Set rules
+// ---------------------------------- //
+***Rules***
+***
+declare ModeName = "Annihilation (Simple version)";
+declare ModeRules = TextLib::Compose(_("Eliminate all bots in the map before the time is running out !\nGreen bots : Rocket\nRed bots : Nucleus\nBlue bots : Laser\nYellow bots : Arrow"), "$"^SpawnScreen::GetModeColor());
+SpawnScreen::ResetRulesSection();
+SpawnScreen::AddSubsection(_("Annihilation - PvE Co-Op Gamemode"), ModeRules, 20.);
+SpawnScreen::CreatePrettyRules(ModeName);
+ModeStatusMessage = _("TYPE: PvE Co-Op\nOBJECTIVE: Eliminate all bots in the map before the time is running out !\nINFOS\nGreen bots : Rocket\nRed bots : Nucleus\nBlue bots : Laser\nYellow bots : Arrow");
+***
+
+// ---------------------------------- //
+// Server start
+// ---------------------------------- //
+***StartServer***
+***
+SoundLayerFirst = UIManager.UILayerCreate();
+UIManager.UIAll.UILayers.add(SoundLayerFirst);
+SoundLayerFirst.ManialinkPage = """
+""";
+
+SoundLayerSecond = UIManager.UILayerCreate();
+UIManager.UIAll.UILayers.add(SoundLayerSecond);
+SoundLayerSecond.ManialinkPage = """
+""";
+
+MatchInfo = UIManager.UILayerCreate();
+UIManager.UIAll.UILayers.add(MatchInfo);
+MatchInfo.ManialinkPage = """
+""";
+// ---------------------------------- //
+// Set mode options
+UseClans = True;
+UseAllies = True;
+// ---------------------------------- //
+// Create the rules
+---Rules---
+
+// ---------------------------------- //
+// Initialize UI
+SpawnScreen::CreateScores("Score.RoundPoints");
+SpawnScreen::CreateMapInfo();
+//Interface::CreateRank();
+
+// ---------------------------------- //
+// Create the scores table
+ST2::SetStyle("LibST_SMBaseSolo");
+ST2::SetStyle("LibST_SMBasePoints");
+MB_SetScoresTableStyleFromXml(S_ScoresTableStylePath);
+ST2::Build("SM");
+***
+
+
+// ---------------------------------- //
+// Map start
+// ---------------------------------- //
+***StartMap***
+***
+LastHit = Now;
+KillStreak = 0;
+Score = 0;
+GamePhase = "checking";
+
+Score::MatchBegin();
+SM::SetupDefaultVisibility();
+
+// ---------------------------------- //
+// Init bases
+foreach (Base in MapBases) {
+	Base.Clan = 1;
+	Base.IsActive = True;
+}
+
+// ---------------------------------- //
+// New map sound
+UIManager.UIAll.UISequence = CUIConfig::EUISequence::Intro;
+
+***
+
+// ---------------------------------- //
+// Play loop
+// ---------------------------------- //
+***PlayLoop***
+***
+// For each player
+foreach (Player in Players) {
+
+	if(GamePhase != "play" && Player.SpawnStatus == CSmPlayer::ESpawnStatus::Spawned){
+		UnspawnPlayer(Player);
+	}
+}
+
+if(GamePhase == "checking"){
+	Score::RoundBegin();
+	UIManager.UIAll.ScoreTableVisibility = CUIConfig::EVisibility::Normal;
+	if (MapLandmarks_BotPath.count == 0){
+		declare Msg = TextLib::Compose(_("This map doesn't have bot spawns. Skipping..."));
+		Message::SendBigMessage(Msg, 1000, 3, CUIConfig::EUISound::EndRound, 0);
+		sleep(5000);
+		GamePhase = "error";
+		MatchEndRequested = True;
+	} else {
+		if(Players.count == 0){
+			sleep(1000);
+			declare Msg = TextLib::Compose(_("No Players"));
+			Message::SendBigMessage(Msg, 1000, 3, CUIConfig::EUISound::Silence, 0);
+		} else if (Players.count > 4){
+			sleep(1000);
+			declare Msg = TextLib::Compose(_("Too much players. Max players script-forced to 4."));
+			Message::SendBigMessage(Msg, 1000, 3, CUIConfig::EUISound::Silence, 0);
+		} else {
+			GamePhase = "newRound";
+		}
+	}
+}
+log(Players.count);
+if(GamePhase == "newRound"){
+	declare Msg = "";
+	
+	UIManager.UIAll.UISequence = CUIConfig::EUISequence::PlayersPresentation;
+	CreateBots();
+	
+	PlaySound("newRoundIn", -1);
+	Msg = TextLib::Compose(_("New round in..."));
+	Message::SendBigMessage(Msg, 2000, 3, CUIConfig::EUISound::PhaseChange, 0);
+	sleep(2000);
+	foreach (Player in Players) {
+		AnniSpawnPlayer(Player);
+	}
+	StartTime = Now;
+	TimeLimit = 45 - 5 * Players.count;
+	if (TimeLimit > 0) EndTime = StartTime + (TimeLimit * 1000) + 2500;
+	else EndTime = -1;
+	MatchInfo(True);
+	
+	Message::SendBigMessage(Msg, 2000, 3, CUIConfig::EUISound::Silence, 0);
+	UIManager.UIAll.UISequence = CUIConfig::EUISequence::Playing;
+	sleep(1000);
+	PlaySound("play", 0);
+	Score = 0;
+	
+	
+	GamePhase = "play";
+} else if(GamePhase == "play"){
+	foreach (Event, PendingEvents) {
+		// ---------------------------------- //
+		// On armor empty
+		if (Event.Type == CSmModeEvent::EType::OnArmorEmpty) {
+			if(Event.Victim.IsFakePlayer){
+				Score += 1;
+				declare Msg = "";
+				declare Gap = BotPlayers.count - Score;
+				declare Variant = 3 - Gap;
+				if (Gap > 0 && Gap <= 3) {
+					if (Gap > 1) {
+						Msg = TextLib::Compose(_("%1 bots left !"), TextLib::ToText(Gap));
+                    } else {
+						Msg = TextLib::Compose(_("Eliminate the last one!"));
+					}
+					Message::SendStatusMessage(Msg, 2000, 3, CUIConfig::EUISound::TieBreakPoint, Variant);
+				}
+	            else if (Gap <= 0) {
+					Msg = TextLib::Compose(_("All bots are annihilated !"));
+					Message::SendStatusMessage(Msg, 2000, 3, CUIConfig::EUISound::VictoryPoint, 0);
+					EndTime = 0;
+					GamePhase = "roundEnd";
+				} else {
+					Message::SendStatusMessage(TextLib::Compose("%1 : %2 / %3", _("Eliminations"), TextLib::ToText(Score), TextLib::ToText(BotPlayers.count)), 2000, 3, CUIConfig::EUISound::ScoreProgress, MathLib::Rand(0,3));
+				}
+				MatchInfo(True);
+				XmlRpc::OnArmorEmpty(Event);
+				PassOn(Event);
+			} else{
+				declare statusMsg = TextLib::Compose(_("%1 $m$a00has been eliminated !"), Event.Victim.Name);
+				Message::SendStatusMessage(statusMsg, 2000, 3, CUIConfig::EUISound::EndMatch, 0);
+				XmlRpc::OnArmorEmpty(Event);
+				PassOn(Event);
+			}
+		} 
+		// ---------------------------------- //
+		// On hit
+		else if (Event.Type == CSmModeEvent::EType::OnHit) {
+			if (Event.Victim == Null || Event.Shooter == Event.Victim) {
+				Discard(Event);
+			} else {
+				if(Event.Shooter.IsFakePlayer && !Event.Victim.IsFakePlayer){ //Bots shoots Players
+
+					Event.Damage = 100;
+					XmlRpc::OnHit(Event);
+					PassOn(Event);
+
+				} else if(!Event.Shooter.IsFakePlayer && Event.Victim.IsFakePlayer){ //Players shoots Bots
+					declare Points = 1;
+					Score::AddPoints(Event.Shooter, Points);
+					Event.ShooterPoints = Points;
+					declare Distance = SendHitDistanceMessage(Event);
+					
+					SetPlayerAmmo(Event.Shooter, CSmMode::EWeapon::Laser, 1);
+					
+					declare HitInterval = 700;
+					if(Now < LastHit + HitInterval){
+						KillStreak += 1;
+						LastHit = Now;
+						DoKillStreakAnnounce();
+					} else {
+						KillStreak = 0;
+						LastHit = Now;
+					}
+					
+					declare lifeStealChance = MathLib::Rand(0,1);
+					
+					if(lifeStealChance == 1){
+						Event.Shooter.Armor += 100;
+						declare UI <=> UIManager.GetUI(Event.Shooter);
+						UI.SendNotice(TextLib::Compose(_("$0a0+1 armor point !")), CUIConfig::ENoticeLevel::Default, Null, CUIConfig::EAvatarVariant::Default, CUIConfig::EUISound::Silence, 0);
+					}
+					
+					if(Event.Victim.Armor == 100){
+						declare bonusTime = 0;
+						
+						switch (Players.count){
+							case 1:
+								bonusTime = MathLib::Rand(3,4);
+							case 2:
+								bonusTime = MathLib::Rand(2,4);
+							case 3:
+								bonusTime = MathLib::Rand(2,3);
+							case 4:
+								bonusTime = MathLib::Rand(1,2);
+							default:
+								bonusTime = MathLib::Rand(3,4);
+						}
+												
+						EndTime += (bonusTime * 1000);
+						
+						if(KillStreak == 0){
+							Message::SendBigMessage(TextLib::Compose(_("+%1 seconds !"), TextLib::ToText(bonusTime)), 3000, 0);
+						} else {
+							Message::SendBigMessage(TextLib::Compose(_("+%1 seconds ! ($0f0+%2!$fff)"), TextLib::ToText(bonusTime+1), TextLib::ToText(1)), 3000, 0);
+							EndTime += 1000;
+						}
+
+						Event.Damage = 100;
+					}
+					XmlRpc::OnHit(Event);
+					PassOn(Event);
+				} else {
+					Discard(Event);
+				}
+			}
+		} 
+		// ---------------------------------- //
+		// On player request respawn
+		else if (Event.Type == CSmModeEvent::EType::OnPlayerRequestRespawn) {
+			if(Event.Player.SpawnStatus == CSmPlayer::ESpawnStatus::Spawned) {			
+				declare statusMsg = TextLib::Compose(_("%1 $m$s$a00has been eliminated !"), Event.Player.Name);
+				Message::SendStatusMessage(statusMsg, 2000, 3, CUIConfig::EUISound::EndMatch, 0);
+			}
+			XmlRpc::OnPlayerRequestRespawn(Event);
+			PassOn(Event);
+		} else {
+			Discard(Event);
+		}
+	}	
+	
+	if((EndTime - Now) == 30000)
+	{
+		PlaySound("30sec", -1);
+	}
+	if((EndTime - Now) == 10000)
+	{
+		PlaySound("cd", 10);
+	}
+	if((EndTime - Now) == 9000)
+	{
+		PlaySound("cd", 9);
+	}
+	if((EndTime - Now) == 8000)
+	{
+		PlaySound("cd", 8);
+	}
+	if((EndTime - Now) == 7000)
+	{
+		PlaySound("cd", 7);
+	}
+	if((EndTime - Now) == 6000)
+	{
+		PlaySound("cd", 6);
+	}
+	if((EndTime - Now) == 5000)
+	{
+		PlaySound("cd", 5);
+	}
+	if((EndTime - Now) == 4000)
+	{
+		PlaySound("cd", 4);
+	}
+	if((EndTime - Now) == 3000)
+	{
+		PlaySound("cd", 3);
+	}
+	if((EndTime - Now) == 2000)
+	{
+		PlaySound("cd", 2);
+	}
+	if((EndTime - Now) == 1000)
+	{
+		PlaySound("cd", 1);
+	}
+	if(EndTime < Now || Players.count == 0 || ClansNbPlayersAlive[1] == 0){
+		sleep(1000);
+		GamePhase = "roundEnd";
+	}
+
+} else if (GamePhase == "roundEnd") {
+	sleep(1000);
+	UIManager.UIAll.ScoreTableVisibility = CUIConfig::EVisibility::ForcedVisible;
+	UIManager.UIAll.UISequence = CUIConfig::EUISequence::PlayersPresentation;
+	MatchInfo.ManialinkPage = "";
+	DestroyAllBotPlayers();
+	MatchInfo(False);
+	EndTime = -1;
+	declare Msg = "";
+	if(Score == BotPlayers.count) {
+		Msg = TextLib::Compose(_("Excellent !"));
+		PlaySound("win", 0);
+		Message::SendBigMessage(Msg, 2000, 3, CUIConfig::EUISound::EndRound, 0);
+		sleep(1000);
+		MatchEndRequested = True;
+		Score::MatchEnd(True);
+	} else {
+		Msg = TextLib::Compose(_("$f55Game Over !"));
+		PlaySound("lost", 0);
+		Message::SendBigMessage(Msg, 2000, 3, CUIConfig::EUISound::EndRound, 0);
+	}
+	sleep(2000);
+	Score::RoundEnd();
+	GamePhase = "checking";
+}
+Message::Loop();
+***
+
+
+// ---------------------------------- //
+// Map end
+// ---------------------------------- //
+/****EndMap***
+***
+****/
+// ---------------------------------- //
+// Server end
+// ---------------------------------- //
+***EndServer***
+***
+UIManager.UILayerDestroyAll();
+Interface::DestroyRank();
+SpawnScreen::DestroyRules();
+SpawnScreen::DestroyScores();
+SpawnScreen::DestroyMapInfo();
+***
+
+// ---------------------------------- //
+// Functions
+// ---------------------------------- //
+
+/* ------------------------------------- */
+/** Spawn a player
+ *
+ * @param	_Player		The player to spawn
+ */
+Void AnniSpawnPlayer(CSmPlayer _Player) {
+	_Player.ArmorMax = 400;
+	_Player.AmmoGain = 1.8;	
+	SetPlayerWeapon(_Player, CSmMode::EWeapon::Laser, False);
+	SetPlayerClan(_Player, 1);
+	SpawnPlayer(_Player, 1, 400, MapLandmarks_PlayerSpawn[MathLib::Rand(0, MapLandmarks_PlayerSpawn.count-1)].PlayerSpawn, Now);
+}
+
+Void PlaySound(Text soundName, Integer variant){
+	SoundLayerFirst.ManialinkPage = """""";
+	if(soundName == "cd"){
+		SoundLayerFirst.ManialinkPage = """<manialink version="2">
+		<audio looping="0" hidden="1" play="1" data="https://dl.dropboxusercontent.com/u/42719494/Maniaplanet/Sounds/cd{{{variant}}}.ogg"/>
+		</manialink>""";
+	}
+	if(soundName == "30sec"){
+		SoundLayerFirst.ManialinkPage = """<manialink version="2">
+		<audio looping="0" hidden="1" play="1" data="https://dl.dropboxusercontent.com/u/42719494/Maniaplanet/Sounds/30s.ogg"/>
+		</manialink>""";
+	}
+	if(soundName == "play"){
+		SoundLayerFirst.ManialinkPage = """<manialink version="2">
+		<audio looping="0" hidden="1" play="1" data="https://dl.dropboxusercontent.com/u/42719494/Maniaplanet/Sounds/321Play.ogg"/>
+		</manialink>""";
+	}
+	if(soundName == "lost"){
+		SoundLayerFirst.ManialinkPage = """<manialink version="2">
+		<audio looping="0" hidden="1" play="1" data="https://dl.dropboxusercontent.com/u/42719494/Maniaplanet/Sounds/lost.ogg"/>        </manialink>""";
+	}
+	if(soundName == "win"){
+		SoundLayerFirst.ManialinkPage = """<manialink version="2">
+		<audio looping="0" hidden="1" play="1" data="https://dl.dropboxusercontent.com/u/42719494/Maniaplanet/Sounds/win.ogg"/>        </manialink>""";
+	}
+	if(soundName == "newRoundIn"){
+		SoundLayerFirst.ManialinkPage = """<manialink version="2">
+		<audio looping="0" hidden="1" play="1" data="https://dl.dropboxusercontent.com/u/42719494/Maniaplanet/Sounds/newRound.ogg"/>        </manialink>""";
+	}
+}
+
+Void CreateBots(){
+	
+		//Bots creation - Normal mode
+		for(botCountId ,1,30) {
+			declare Spawn <=> MapLandmarks_BotPath[MathLib::Rand(0, MapLandmarks_BotPath.count-1)];
+			
+			declare newBot = CreateBotPlayer(NullId, 0);
+	
+			newBot.Driver.AttackFilter = CSmPlayerDriver::ESmAttackFilter::OppositePlayers;
+
+			newBot.Driver.Behaviour = CSmPlayerDriver::ESmDriverBehaviour::Saunter;
+			newBot.Driver.Saunter_AnchorPoint = Spawn.Position;
+			newBot.Driver.Saunter_Radius = 10.;
+		
+			
+			declare botsWeapons = 0;
+
+			botsWeapons = MathLib::Rand(1,4);
+			if(botsWeapons == 1){
+				SetPlayerWeapon(newBot, CSmMode::EWeapon::Rocket, False);
+				newBot.ForceColor = <0.0, 1.0, 0.0>; 
+			} else if(botsWeapons == 2){
+				SetPlayerWeapon(newBot, CSmMode::EWeapon::Laser, False);
+				newBot.ForceColor = <0.0, 0.5, 0.5>;
+			} else if(botsWeapons == 3){
+				SetPlayerWeapon(newBot, CSmMode::EWeapon::Nucleus, False);
+				newBot.ForceColor = <0.5, 0.0, 0.5>;
+			} else if(botsWeapons == 4){
+				SetPlayerAmmoMax(newBot, CSmMode::EWeapon::Arrow, 2);
+				SetPlayerWeapon(newBot, CSmMode::EWeapon::Arrow, False);
+				newBot.ForceColor = <0.5, 0.5, 0.0>;
+			}
+			newBot.Driver.AggroRadius = 50.;
+			newBot.Driver.DisengageDistance = 30.;
+			newBot.Driver.Accuracy = 0.6;
+			newBot.Driver.Fov = 300.0;
+
+			declare armor = 0;
+	
+			armor = 100;
+			newBot.ArmorMax = 100;
+			SpawnBotPlayer(newBot, 0, armor, Spawn.BotPath, Now);
+		}	
+}
+
+Void UnspawnPlayers(){
+	foreach (Player in Players) {
+		if (Player.SpawnStatus == CSmPlayer::ESpawnStatus::Spawned) {
+			UnspawnPlayer(Player);
+		}
+	}
+}
+
+Real SendHitDistanceMessage(CSmModeEvent _Event) {
+        if (_Event.Type != CSmModeEvent::EType::OnHit) return -1.;                              // Wrong event type
+        if (_Event.Shooter == Null || _Event.Victim == Null || _Event.Shooter == _Event.Victim) return -1.;     // Invalid players    
+        // Get distance
+        declare Distance = MathLib::Distance(_Event.Shooter.Position, _Event.Victim.Position);
+        Distance = MathLib::NearestInteger(Distance * 10) / 10.0;
+       
+        // Save longest hit
+        /*
+        if (Distance > G_LongestHitDist) {
+                G_LongestHitDist = Distance;
+                G_LongestHitName = _Event.Shooter.Name;
+                SetFooterStats(Null);
+        }
+        */
+        declare UI <=> UIManager.GetUI(_Event.Shooter);
+        if (UI == Null) return -1.;
+       
+        // Send message
+        UI.SendNotice(TextLib::Compose(_("%1m hit!"), TextLib::ToText(Distance)),
+                CUIConfig::ENoticeLevel::Default, Null, CUIConfig::EAvatarVariant::Default,
+                CUIConfig::EUISound::Silence, 0);
+        return Distance;
+}
+
+Void DoKillStreakAnnounce(){
+	SoundLayerSecond.ManialinkPage = """""";
+	if(KillStreak == 1){
+		SoundLayerSecond.ManialinkPage = """<manialink version="2">
+	<audio looping="0" hidden="1" play="1" data="https://dl.dropboxusercontent.com/u/42719494/Maniaplanet/Double_Kill.ogg"/>        </manialink>""";
+		foreach(Player in Players){
+			declare UI <=> UIManager.GetUI(Player);
+       		UI.SendNotice(TextLib::Compose(_("$f00Double Kill!")), CUIConfig::ENoticeLevel::Default, Null, CUIConfig::EAvatarVariant::Default, CUIConfig::EUISound::Silence, 0);
+		}
+	} else if(KillStreak == 2){
+		SoundLayerSecond.ManialinkPage = """<manialink version="2">
+	<audio looping="0" hidden="1" play="1" data="https://dl.dropboxusercontent.com/u/42719494/Maniaplanet/MultiKill.ogg"/>        </manialink>""";
+		foreach(Player in Players){
+			declare UI <=> UIManager.GetUI(Player);
+       		UI.SendNotice(TextLib::Compose(_("$f00Multi Kill!")), CUIConfig::ENoticeLevel::Default, Null, CUIConfig::EAvatarVariant::Default, CUIConfig::EUISound::Silence, 0);
+		}
+	} else if(KillStreak == 3){
+		SoundLayerSecond.ManialinkPage = """<manialink version="2">
+	<audio looping="0" hidden="1" play="1" data="https://dl.dropboxusercontent.com/u/42719494/Maniaplanet/MegaKill.ogg"/>        </manialink>""";
+		foreach(Player in Players){
+			declare UI <=> UIManager.GetUI(Player);
+       		UI.SendNotice(TextLib::Compose(_("$f00Mega Kill!")), CUIConfig::ENoticeLevel::Default, Null, CUIConfig::EAvatarVariant::Default, CUIConfig::EUISound::Silence, 0);
+		}
+	} else if(KillStreak == 4){
+		SoundLayerSecond.ManialinkPage = """<manialink version="2">
+	<audio looping="0" hidden="1" play="1" data="https://dl.dropboxusercontent.com/u/42719494/Maniaplanet/UltraKill.ogg"/>        </manialink>""";
+		foreach(Player in Players){
+			declare UI <=> UIManager.GetUI(Player);
+       		UI.SendNotice(TextLib::Compose(_("$f00Ultra Kill!")), CUIConfig::ENoticeLevel::Default, Null, CUIConfig::EAvatarVariant::Default, CUIConfig::EUISound::Silence, 0);
+		}
+	} else if(KillStreak > 5){
+		SoundLayerSecond.ManialinkPage = """<manialink version="2">
+	<audio looping="0" hidden="1" play="1" data="https://dl.dropboxusercontent.com/u/42719494/Maniaplanet/MonsterKill_F.ogg"/>        </manialink>""";
+		foreach(Player in Players){
+			declare UI <=> UIManager.GetUI(Player);
+       		UI.SendNotice(TextLib::Compose(_("$f00Monster Kill!")), CUIConfig::ENoticeLevel::Default, Null, CUIConfig::EAvatarVariant::Default, CUIConfig::EUISound::Silence, 0);
+		}
+	}
+}
+
+Void MatchInfo(Boolean show){
+	if(show){
+		MatchInfo.ManialinkPage = """
+			<frame posn="158 -62 0">
+				<label posn="0 0 1" halign="right" style="TextButtonNav" text="{{{_("$sEliminations")}}} : {{{Score}}}/{{{BotPlayers.count}}}" />
+				
+			</frame>
+			<quad posn="158 -69 0" halign= "right" sizen="49 13" bgcolor="FFFA" image="https://dl.dropboxusercontent.com/u/39375802/ATA/logoann.png"/>
+		""";
+	} else {
+		MatchInfo.ManialinkPage = "";
+	}
+}
