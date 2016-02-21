@@ -1,16 +1,9 @@
 # Annihilation
 ShootMania GameMode
 
-Changelog :
-Update 5
-- Added victory jingle
-- Fixed glitched difficulty
-- Added one more difficulty
-- Added custom difficulty
+### FranÃ§ais - KeskecÃ© ?
 
-### Français - Keskecé ?
-
-Annihilation est un mode de jeu ShootMania Coopératif où le but est d'éliminer tous les bots disséminés sur la map. Le concept est simple mais peut-être très utile pour s'entraîner à la visée au laser car vous avez uniquement cette arme pour éliminer tous les bots (une option permet de jouer aussi avec les rockets).
+Annihilation est un mode de jeu ShootMania CoopÃ©ratif oÃ¹ le but est d'Ã©liminer tous les bots dissÃ©minÃ©s sur la map. Le concept est simple mais peut-Ãªtre trÃ¨s utile pour s'entraÃ®ner Ã  la visÃ©e au laser car vous avez uniquement cette arme pour Ã©liminer tous les bots (une option permet de jouer aussi avec les rockets).
 
 ### English - whatisviss ?
 
