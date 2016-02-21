@@ -32,56 +32,43 @@
 		<!-- Default : <setting name="S_UseScriptCallbacks" type="boolean" value="0"/> -->
 		<!-- Default : <setting name="S_NeutralEmblemUrl" type="text" value=""/> -->
 		<!-- Default : <setting name="S_ScoresTableStylePath" type="text" value=""/> -->
-		<!-- Default : <setting name="S_Difficulty" type="integer" value="2"/> -->
-		<!-- Default : <setting name="S_TimeLimit" type="integer" value="10"/> -->
-		<!-- Default : <setting name="S_AmmoRegen" type="boolean" value="0"/> -->
-		<!-- Default : <setting name="S_LifeSteal" type="boolean" value="0"/> -->
-		<!-- Default : <setting name="S_TimeReward" type="boolean" value="0"/> -->
-		<!-- Default : <setting name="S_Respawn" type="boolean" value="0"/> -->
-		<!-- Default : <setting name="S_PlayersWeapon" type="integer" value="1"/> -->
-		<!-- Default : <setting name="S_BotsAccuracy" type="integer" value="2"/> -->
-		<!-- Default : <setting name="S_BotsWeapons" type="integer" value="0"/> -->
-		<!-- Default : <setting name="S_BotsWeaponRocket" type="integer" value="0"/> -->
-		<!-- Default : <setting name="S_BotsWeaponLaser" type="integer" value="0"/> -->
-		<!-- Default : <setting name="S_BotsWeaponNucleus" type="integer" value="0"/> -->
-		<!-- Default : <setting name="S_BotsWeaponArrow" type="integer" value="0"/> -->
 	</mode_script_settings>
 
 	<startindex>0</startindex>
 	<map>
-		<file>Annihilation\Annihilation - CastleCrasher - PapyChampy.Map.Gbx</file>
-		<ident>HlnUJEfSayORtF1VosU6VqwYH43</ident>
+		<file>My Maps\Annihilation\Annihilation - CastleCrasher - PapyChampy.Map.Gbx</file>
+		<ident>cdXM5r70NMBllaXfP21wu7XZhD2</ident>
 	</map>
 	<map>
-		<file>Annihilation\Annihilation - Collided.Map.Gbx</file>
-		<ident>nq2aSzhIAVouYXPWn4yiP8TRPi8</ident>
+		<file>My Maps\Annihilation\Annihilation - Collided.Map.Gbx</file>
+		<ident>zqzHeq7vO5_No_BQfyPMOKi_vL3</ident>
 	</map>
 	<map>
-		<file>Annihilation\Annihilation - Confined.Map.Gbx</file>
-		<ident>dhelAJJvYVmwdwItdsMHpxVWRm6</ident>
+		<file>My Maps\Annihilation\Annihilation - Confined.Map.Gbx</file>
+		<ident>lGAjSFhWrjtk5FcBBSxNuaPSQjj</ident>
 	</map>
 	<map>
-		<file>Annihilation\Annihilation - Double Elder Suns.Map.Gbx</file>
-		<ident>HlSviw0HIQvgqbin9XPrZGwRgQh</ident>
+		<file>My Maps\Annihilation\Annihilation - Dalden.Map.Gbx</file>
+		<ident>HYc7FUTbHMNIHV5Si0OU2eE5aie</ident>
 	</map>
 	<map>
-		<file>Annihilation\Annihilation - Four Paladins.Map.Gbx</file>
-		<ident>JaXvrq5jjVeUPZ3mTquZXzCTQ38</ident>
+		<file>My Maps\Annihilation\Annihilation - Double Elder Suns.Map.Gbx</file>
+		<ident>lL18kWK6hcxalciDBFuuy1yodWi</ident>
 	</map>
 	<map>
-		<file>Annihilation\Annihilation - IronFist - WabbitFace.Map.Gbx</file>
-		<ident>XJDIaiWVuctEEuKmEYa0zTeHRu4</ident>
+		<file>My Maps\Annihilation\Annihilation - Four Paladins.Map.Gbx</file>
+		<ident>MCFdGzwM9FmidLelp89oh8EE5Ah</ident>
 	</map>
 	<map>
-		<file>Annihilation\Annihilation - Large.Map.Gbx</file>
-		<ident>k8XhhAg1hysdYqXW3SJJr9nKewc</ident>
+		<file>My Maps\Annihilation\Annihilation - IronFist - WabbitFace.Map.Gbx</file>
+		<ident>49x9Ea1qvlDRQOhrnLftLEonfnj</ident>
 	</map>
 	<map>
-		<file>Annihilation\Annihilation - TheCastle.Map.Gbx</file>
-		<ident>cvVHOJ0zx3lNyKEs_z_56NGQYBa</ident>
+		<file>My Maps\Annihilation\Annihilation - TheCastle.Map.Gbx</file>
+		<ident>Qni8lop1vtx13FuFhbg8SubnwD4</ident>
 	</map>
 	<map>
-		<file>Annihilation\Annihilation - Valley of the Damned - Kommu.Map.Gbx</file>
-		<ident>cFGyZ4xcRx31UMSYwxfNdQvJPQ5</ident>
+		<file>My Maps\Annihilation\Annihilation - Valley of the Damned - Kommu.Map.Gbx</file>
+		<ident>PrDlggOgCxMNuUZXxmtjQNkqtP5</ident>
 	</map>
 </playlist>

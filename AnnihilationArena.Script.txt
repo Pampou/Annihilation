@@ -1,0 +1,107 @@
+#RequireContext CSmMapType
+#Include "TextLib" as TextLib
+#Include "Libs/Nadeo/Anchor.Script.txt" as Anchor
+
+declare Text Rules;
+declare Text Warning;
+
+// ---------------------------------- //
+// Initialize the anchors
+Void InitAnchors() {
+	foreach (Anchor in AnchorData) {
+		Anchor.Tag = Anchor.DefaultTag;
+		log(Anchor.Tag);
+		Anchor.Order = 0;
+	}
+}
+
+// ---------------------------------- //
+// Check if the map is valid
+Void UpdateValidability() {
+	InitAnchors();
+	
+	Anchor::UpdateAnchorCounts();
+	
+	if (!Anchor::HasAtLeastOneAnchor("Spawn", 0, TextLib::Compose(_("You must place at least one Spawn")))) return;
+	
+	ValidationStatus = CSmMapType::ValidationStatus::Validated;	
+}
+
+// ---------------------------------- //
+// Manialink for non editable anchor
+Text NoEditManialink() {
+	return """
+<frame posn="120 35">
+	<quad posn="0 0 -1" sizen="70 15" halign="center" style="Bgs1" substyle="BgWindow2"/>
+	<quad posn="0 0 2" sizen="74 15" halign="center" valign="bottom" style="Bgs1InRace" substyle="BgTitle3_5"/>
+	<label posn="0 5.5 3" scale="0.9" halign="center" valign="bottom" style="TextTitle3" textprefix="$fff" text="{{{_("This anchor is not editable")}}}" />
+	<label text="OK" posn="0 -3.5 3" halign="center" style="CardButtonMedium" ScriptEvents="true"/>
+    </frame>
+<script><!--
+main() {
+	declare Boolean Finish for Page;
+	Finish = False;	
+	while(!Finish) {
+		yield;
+		
+		foreach(Event in PendingEvents) {
+			switch(Event.Type){
+				case CMlEvent::Type::MouseClick : {
+					Finish = True;
+				}	
+			}
+		}
+	}
+}
+--></script>
+""";
+}
+
+// ---------------------------------- //
+// Show the anchor edition manialink
+Void EditAnchorData(Ident _EditedAnchorDataId)
+{	
+	UpdateValidability();
+	declare Integer AnchorOrder for ManialinkPage;
+	declare Boolean Finish for ManialinkPage;
+	
+	declare DefaultTag = AnchorData[_EditedAnchorDataId].DefaultTag;
+	ManialinkText ^= NoEditManialink();
+	
+	AnchorOrder = AnchorData[_EditedAnchorDataId].Order;
+	Finish = False;
+	while(!Finish) {
+		yield;
+	}
+	AnchorData[_EditedAnchorDataId].Order = AnchorOrder;
+	UpdateValidability();
+}
+
+// ---------------------------------- //
+// Main
+// ---------------------------------- //
+
+main() {		
+	UpdateValidability();
+	CustomEditAnchorData = True;
+	Rules = _("$s$fffYou must place at least one spawn for players. Press F4 to place BotPaths (Bot Spawns). The more you place BotPaths, the better the experience will be on your map (Random Generation).");
+	Warning = _("$s$f00If there is not at least one BotPath, the script will skip your map :/");
+	
+	while (True) {	
+		yield;
+			
+		ManialinkText = """<frame posn="0 85">
+			<label posn="0 0 0" sizen="150 5" autonewline="1" halign="center" style="TextStaticSmall" text="{{{Rules}}}" />
+			<label posn="0 -10 0" sizen="150 5" autonewline="1" halign="center" style="TextStaticSmall" text="{{{Warning}}}" />
+			</frame>""";
+		foreach(Event in PendingEvents) {
+			if(Event.Type == CPluginEvent::Type::MapModified) {
+				UpdateValidability();
+			} else if(Event.Type == CPluginEvent::Type::EditAnchor) {
+				EditAnchorData(Event.EditedAnchorDataId);
+			} else if(Event.Type == CPluginEvent::Type::StartValidation) {
+				StartTestMapWithMode("Annihilation.Script.txt");
+			}
+		}		
+	}	
+}
